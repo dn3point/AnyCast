@@ -1,0 +1,20 @@
+{
+  "name": "anycast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "把手机浏览器里任意网页视频投到同一局域网的智能电视（DLNA / Chromecast / 电视浏览器接收端）",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "anycast": "gateway/bin/anycast.js"
+  },
+  "scripts": {
+    "start": "node gateway/bin/anycast.js",
+    "fake-tv": "node gateway/tools/fake-dlna-tv.js",
+    "test": "node --test --test-concurrency=1 \"gateway/test/*.test.js\"",
+    "test:browser": "node --test --test-concurrency=1 \"gateway/test/browser/*.test.js\"",
+    "build:icons": "node gateway/tools/build-icons.js"
+  }
+}
