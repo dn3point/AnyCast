@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AnyCast 设置</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><strong>AnyCast 设置</strong></header>
+  <form id="form">
+    <label class="small muted">网关地址
+      <input id="gateway" placeholder="http://192.168.1.10:8090" inputmode="url" autocomplete="off">
+    </label>
+    <label class="small muted">访问令牌（网关用 --token 启动时填写）
+      <input id="token" autocomplete="off">
+    </label>
+    <label class="small"><input id="floating" type="checkbox" style="width:auto;min-height:0"> 在网页上显示悬浮“投屏”按钮</label>
+    <button type="submit" class="primary">保存并测试</button>
+  </form>
+  <div id="msg" class="msg" role="status" hidden></div>
+  <script src="common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

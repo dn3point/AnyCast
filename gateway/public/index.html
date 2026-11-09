@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>AnyCast 投屏</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/><path class="wave" d="M6 13a3 3 0 0 1 3 3M6 10a6 6 0 0 1 6 6"/></svg>
+      <div>
+        <h1>AnyCast</h1>
+        <p class="sub">网页视频投屏到电视</p>
+      </div>
+    </div>
+    <div id="features" class="features" aria-label="网关能力"></div>
+  </header>
+
+  <main>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <section class="card" id="handoff" hidden>
+      <div class="handoff">
+        <span class="pill">来自网页</span>
+        <div>
+          <div id="handoffTitle" class="handoff-title"></div>
+          <div id="handoffHost" class="muted small"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2><span class="step">1</span>选择电视</h2>
+        <button id="refreshDevices" class="ghost" type="button">刷新</button>
+      </div>
+      <div id="devices" class="list" role="radiogroup" aria-label="电视列表"></div>
+      <details class="more">
+        <summary>找不到电视？</summary>
+        <ul class="tips">
+          <li>确认手机、电视、运行网关的设备在<strong>同一个 Wi-Fi</strong>。</li>
+          <li>电视需开启 DLNA / “投屏接收” / “无线显示”或乐播投屏等功能（多数智能电视默认开启）。</li>
+          <li>老电视或没有 DLNA 的电视：用电视自带浏览器打开 <code id="tvUrl"></code>，它就会出现在上面列表里。</li>
+        </ul>
+        <form id="addForm" class="add-form">
+          <label>手动添加
+            <input id="addInput" placeholder="DLNA 描述地址 http://…/description.xml 或 Chromecast IP" autocomplete="off">
+          </label>
+          <button type="submit">添加</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2><span class="step">2</span>选择视频</h2>
+      </div>
+      <form id="extractForm" class="url-form">
+        <input id="urlInput" type="url" inputmode="url" placeholder="粘贴网页链接或视频地址" autocomplete="off" required>
+        <button type="submit" id="extractBtn">解析</button>
+      </form>
+      <details class="more">
+        <summary>需要登录的网站（Cookie / Referer）</summary>
+        <label>Cookie<textarea id="cookieInput" rows="2" placeholder="可选。会员视频需要网页的登录 Cookie；用书签脚本或扩展会自动带上"></textarea></label>
+        <label>Referer<input id="refererInput" placeholder="可选，默认使用网页链接"></label>
+      </details>
+      <div id="candidates" class="list" role="radiogroup" aria-label="视频列表"></div>
+    </section>
+
+    <section class="card cast-card">
+      <label class="mode">投屏方式
+        <select id="modeSelect">
+          <option value="auto">自动（推荐）</option>
+          <option value="direct">直连：电视直接拉流</option>
+          <option value="proxy">代理：经网关中转（解决防盗链/跨域）</option>
+          <option value="transcode">转封装：ffmpeg 合成 TS（兼容老电视）</option>
+        </select>
+      </label>
+      <button id="castBtn" class="primary" type="button" disabled>投屏到电视</button>
+    </section>
+
+    <section class="card" id="now" hidden>
+      <div class="card-head">
+        <h2>正在播放</h2>
+        <span id="nowMode" class="badge"></span>
+      </div>
+      <div id="nowTitle" class="now-title"></div>
+      <div id="nowDevice" class="muted small"></div>
+      <div class="progress">
+        <span id="posText">0:00</span>
+        <input id="seek" type="range" min="0" max="0" step="1" value="0" aria-label="进度">
+        <span id="durText">--:--</span>
+      </div>
+      <div class="controls">
+        <button id="back10" type="button" aria-label="后退 10 秒">-10s</button>
+        <button id="playPause" type="button" class="round" aria-label="播放/暂停">⏯</button>
+        <button id="fwd10" type="button" aria-label="前进 10 秒">+10s</button>
+        <button id="stopBtn" type="button" class="danger">停止</button>
+      </div>
+      <label class="volume">音量<input id="volume" type="range" min="0" max="100" step="1" value="30"></label>
+      <div id="nowState" class="muted small"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>在任意网页一键投屏</h2></div>
+      <ol class="howto">
+        <li><strong>书签脚本（iOS Safari / 安卓 Chrome 等所有浏览器）</strong><br>
+          复制下面的代码，新建一个书签，把网址替换成这段代码，起名“投屏”。看视频时打开书签（安卓 Chrome 在地址栏输入“投屏”再点它）。
+          <div class="bm">
+            <a id="bookmarklet" href="#" class="bm-link">📺 投屏</a>
+            <button id="copyBm" type="button" class="ghost">复制代码</button>
+          </div>
+        </li>
+        <li><strong>浏览器扩展（Firefox 安卓 / Edge 安卓 / Safari iOS / 电脑浏览器）</strong><br>
+          安装仓库里的 <code>extension/</code>，能抓到书签脚本抓不到的请求（含 HttpOnly 登录 Cookie），网页上会出现悬浮“投屏”按钮。</li>
+        <li><strong>直接粘贴</strong>：分享 → 复制链接 → 粘贴到上面的输入框。</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="foot muted small">
+    受 DRM 版权保护（Widevine / FairPlay / PlayReady）的视频无法被第三方投屏，请使用官方 App。
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AnyCast 电视接收端</title>
+  <style>
+    :root { --bg: #000; --text: #e8efed; --muted: #8fa19c; --accent: #2dd4bf; color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+      font: 22px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif; }
+    video { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
+    .idle { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 5vh 6vw; gap: 0.6em; }
+    .idle h1 { font-size: 2.2em; margin: 0; color: var(--accent); }
+    .idle .name { font-size: 1.2em; }
+    .idle .hint { color: var(--muted); max-width: 32em; }
+    .idle code { color: var(--text); background: #16211f; padding: 0.1em 0.4em; border-radius: 6px; }
+    .status { position: fixed; left: 2vw; bottom: 2vh; color: var(--muted); font-size: 0.75em; }
+    .osd { position: fixed; top: 3vh; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.7); padding: 0.4em 1em; border-radius: 10px; font-size: 0.9em; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <video id="v" playsinline></video>
+  <div id="idle" class="idle">
+    <h1>AnyCast</h1>
+    <div class="name" id="name"></div>
+    <div class="hint">在手机上打开 <code id="phoneUrl"></code>，选择本设备即可投屏。</div>
+  </div>
+  <div id="osd" class="osd" hidden></div>
+  <div id="status" class="status">正在连接网关…</div>
+
+  <script>
+  (function () {
+    'use strict';
+    // Pinned CDN builds, loaded only when the TV cannot play HLS / DASH natively.
+    var HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
+    var DASH_JS = 'https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js';
+
+    var video = document.getElementById('v');
+    var params = new URLSearchParams(location.search);
+    var token = params.get('token');
+    var id = params.get('id');
+    try { id = id || localStorage.getItem('anycast.receiver.id'); } catch (e) {}
+    if (!id) {
+      id = 'tv' + Math.random().toString(36).slice(2, 10);
+      try { localStorage.setItem('anycast.receiver.id', id); } catch (e) {}
+    }
+    var name = params.get('name') || '电视浏览器';
+    document.getElementById('name').textContent = '本设备：' + name;
+    document.getElementById('phoneUrl').textContent = location.origin + '/';
+
+    var player = null; // hls.js / dash.js instance
+    var lastError = null;
+    var osdTimer = null;
+
+    function osd(text) {
+      var el = document.getElementById('osd');
+      el.textContent = text;
+      el.hidden = false;
+      clearTimeout(osdTimer);
+      osdTimer = setTimeout(function () { el.hidden = true; }, 2500);
+    }
+
+    function loadScript(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = function () { reject(new Error('无法加载播放器脚本（电视无法访问外网？）')); };
+        document.head.appendChild(s);
+      });
+    }
+
+    function reset() {
+      if (player) {
+        try { player.destroy ? player.destroy() : player.reset(); } catch (e) {}
+        player = null;
+      }
+      video.removeAttribute('src');
+      video.load();
+    }
+
+    function play() {
+      var p = video.play();
+      if (p && p.catch) {
+        p.catch(function () {
+          // Autoplay with sound blocked: start muted, ask for a key press.
+          video.muted = true;
+          video.play().catch(function () {});
+          osd('按遥控器“确认”键开启声音');
+        });
+      }
+    }
+
+    function load(msg) {
+      reset();
+      lastError = null;
+      document.getElementById('idle').hidden = true;
+      osd(msg.title || '正在加载…');
+      var url = msg.url;
+      var mime = msg.mime || '';
+      if (/mpegurl/i.test(mime) && !video.canPlayType('application/vnd.apple.mpegurl')) {
+        return loadScript(HLS_JS).then(function () {
+          if (!window.Hls || !window.Hls.isSupported()) throw new Error('此浏览器不支持 HLS');
+          player = new window.Hls({ enableWorker: true, lowLatencyMode: Boolean(msg.live) });
+          player.on(window.Hls.Events.ERROR, function (e, data) {
+            if (data.fatal) lastError = 'HLS 播放错误：' + data.details;
+          });
+          player.loadSource(url);
+          player.attachMedia(video);
+          play();
+        }).catch(function (e) { lastError = e.message; });
+      }
+      if (/dash\+xml/i.test(mime)) {
+        return loadScript(DASH_JS).then(function () {
+          player = window.dashjs.MediaPlayer().create();
+          player.initialize(video, url, true);
+          play();
+        }).catch(function (e) { lastError = e.message; });
+      }
+      video.src = url;
+      play();
+      return Promise.resolve();
+    }
+
+    function handle(msg) {
+      switch (msg.type) {
+        case 'load': load(msg); break;
+        case 'play': video.play(); break;
+        case 'pause': video.pause(); break;
+        case 'stop':
+          reset();
+          document.getElementById('idle').hidden = false;
+          break;
+        case 'seek': video.currentTime = Number(msg.value) || 0; break;
+        case 'volume':
+          video.muted = false;
+          video.volume = Math.max(0, Math.min(1, Number(msg.value) / 100));
+          osd('音量 ' + Math.round(video.volume * 100));
+          break;
+        default: break;
+      }
+    }
+
+    function stateName() {
+      if (!video.currentSrc && !player) return 'idle';
+      if (video.error) return 'stopped';
+      if (video.ended) return 'stopped';
+      if (video.paused) return 'paused';
+      if (video.readyState < 3) return 'loading';
+      return 'playing';
+    }
+
+    function report() {
+      var body = {
+        state: stateName(),
+        position: isFinite(video.currentTime) ? video.currentTime : null,
+        duration: isFinite(video.duration) ? video.duration : null,
+        volume: Math.round((video.muted ? 0 : video.volume) * 100),
+      };
+      var err = lastError || (video.error ? '无法播放该视频（错误码 ' + video.error.code + '）' : null);
+      if (err) body.error = err;
+      fetch('/api/receivers/' + encodeURIComponent(id) + '/status' + (token ? '?token=' + encodeURIComponent(token) : ''), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(function () {});
+    }
+
+    function connect() {
+      var q = 'id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(name) + (token ? '&token=' + encodeURIComponent(token) : '');
+      var es = new EventSource('/api/receivers/events?' + q);
+      var status = document.getElementById('status');
+      es.addEventListener('hello', function () { status.textContent = '已连接网关，等待投屏'; });
+      es.onmessage = function (e) {
+        try { handle(JSON.parse(e.data)); } catch (err) { lastError = err.message; }
+        setTimeout(report, 300);
+      };
+      es.onerror = function () { status.textContent = '与网关的连接中断，正在重连…'; };
+    }
+
+    // Remote control keys.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (video.muted) { video.muted = false; osd('声音已开启'); }
+        else if (video.paused) video.play(); else video.pause();
+      } else if (e.key === 'ArrowRight') { video.currentTime += 10; osd('+10 秒'); }
+      else if (e.key === 'ArrowLeft') { video.currentTime -= 10; osd('-10 秒'); }
+      else if (e.key === 'ArrowUp') { video.volume = Math.min(1, video.volume + 0.1); osd('音量 ' + Math.round(video.volume * 100)); }
+      else if (e.key === 'ArrowDown') { video.volume = Math.max(0, video.volume - 0.1); osd('音量 ' + Math.round(video.volume * 100)); }
+    });
+
+    ['playing', 'pause', 'ended', 'error', 'waiting'].forEach(function (ev) { video.addEventListener(ev, report); });
+    setInterval(report, 2000);
+    connect();
+  })();
+  </script>
+</body>
+</html>

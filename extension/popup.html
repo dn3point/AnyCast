@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AnyCast 投屏</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <strong>AnyCast 投屏</strong>
+    <a id="openOptions" href="#" class="link">设置</a>
+  </header>
+
+  <section id="setup" hidden>
+    <p>填写运行 AnyCast 网关的地址（网关启动时会打印）：</p>
+    <form id="setupForm" class="row">
+      <input id="gatewayInput" placeholder="http://192.168.1.10:8090" inputmode="url" autocomplete="off">
+      <button type="submit">保存</button>
+    </form>
+  </section>
+
+  <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
+
+  <section>
+    <h2>本页视频</h2>
+    <div id="page" class="muted small"></div>
+    <div id="drm" class="warn" hidden></div>
+    <div id="media" class="list" role="radiogroup" aria-label="视频"></div>
+    <button id="deep" type="button" class="secondary" hidden>交给网关深度解析</button>
+  </section>
+
+  <section>
+    <h2>电视</h2>
+    <div id="devices" class="list" role="radiogroup" aria-label="电视"></div>
+  </section>
+
+  <section>
+    <label class="small muted">投屏方式
+      <select id="mode">
+        <option value="auto">自动（推荐）</option>
+        <option value="direct">直连</option>
+        <option value="proxy">网关代理</option>
+        <option value="transcode">转封装</option>
+      </select>
+    </label>
+    <button id="cast" type="button" class="primary" disabled>投屏到电视</button>
+  </section>
+
+  <section id="now" hidden>
+    <div id="nowText" class="small"></div>
+    <div class="row">
+      <button type="button" data-act="play">▶</button>
+      <button type="button" data-act="pause">⏸</button>
+      <button type="button" data-act="stop" class="danger">停止</button>
+      <a id="openGateway" class="link" target="_blank" rel="noopener">完整遥控器</a>
+    </div>
+  </section>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
